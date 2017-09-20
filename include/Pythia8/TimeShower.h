@@ -148,7 +148,7 @@ public:
   bool initUncertainties();
 
   // Calculate uncertainty-band weights for accepted/rejected trial branching.
-  void calcUncertainties(bool accept, double pAccept,
+  void calcUncertainties(bool accept, double pAccept, double enhance, double vp, 
     TimeDipoleEnd* dip, Particle* radPtr, Particle* emtPtr);
 
   // Tell which system was the last processed one.

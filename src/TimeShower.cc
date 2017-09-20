@@ -3376,40 +3376,14 @@ bool TimeShower::branch( Event& event, bool isInterleaved) {
     }
     return false;
   }
-
-  // Emission veto is a phase space restriction, and should not be included in the
-  //   uncertainty calculation
-  if (doUncertaintiesNow)
-    calcUncertainties( acceptEvent, pAccept, dipSel, &rad, &emt);
-
-  // Return false if we decided to reject this branching.
-  if( !acceptEvent ) {
-    event.popBack( event.size() - eventSizeOld);
-    event[iRadBef].status( iRadStatusV);
-    event[iRadBef].daughters( iRadDau1V, iRadDau2V);
-    if (useLocalRecoilNow && isrTypeNow == 0) {
-      event[iRecBef].status( iRecStatusV);
-      event[iRecBef].daughters( iRecDau1V, iRecDau2V);
-    } else if (useLocalRecoilNow) {
-      event[iRecBef].mothers( iRecMot1V, iRecMot2V);
-      if (iRecMot1V == beamOff1) event[beamOff1].daughter1( ev1Dau1V);
-      if (iRecMot1V == beamOff2) event[beamOff2].daughter1( ev2Dau1V);
-    } else {
-      for (int iG = 0; iG < int(iGRecBef.size()); ++iG) {
-        event[iGRecBef[iG]].statusPos();
-        event[iGRecBef[iG]].daughters( 0, 0);
-      }
-    }
-    return false;
-  }
-
+  // Default settings for uncertainty calculations
+  double weight = 1.;
+  double vp = 0.;
+  bool vetoedEnhancedEmission = false;  
   // Calculate event weight for enhanced emission rate.
   if (canEnhanceET) {
-
     // Check if emission weight was enhanced. Get enhance weight factor.
     bool foundEnhance = false;
-    double weight = 1.;
-    double vp = 0.;
     // Move backwards as last elements have highest pT, thus are chosen
     // splittings.
     for ( map<double,pair<string,double> >::reverse_iterator
@@ -3425,7 +3399,6 @@ bool TimeShower::branch( Event& event, bool isInterleaved) {
     }
 
     // Check emission veto.
-    bool vetoedEnhancedEmission = false;
     if (foundEnhance && rndmPtr->flat() < vp ) vetoedEnhancedEmission = true;
     // Calculate new event weight.
     double rwgt = 1.;
@@ -3441,30 +3414,37 @@ bool TimeShower::branch( Event& event, bool isInterleaved) {
       userHooksPtr->setEnhancedEventWeight(wtOld*rwgt);
     if ( doTrialNow && canEnhanceTrial)
       userHooksPtr->setEnhancedTrial(sqrt(dipSel->pT2), weight);
-
-    // Veto if necessary.
-    if (vetoedEnhancedEmission && canEnhanceEmission) {
-      infoPtr->addCounter(40);
-      event.popBack( event.size() - eventSizeOld);
-      event[iRadBef].status( iRadStatusV);
-      event[iRadBef].daughters( iRadDau1V, iRadDau2V);
-      if (useLocalRecoilNow && isrTypeNow == 0) {
-        event[iRecBef].status( iRecStatusV);
-        event[iRecBef].daughters( iRecDau1V, iRecDau2V);
-      } else if (useLocalRecoilNow) {
-        event[iRecBef].mothers( iRecMot1V, iRecMot2V);
-        if (iRecMot1V == beamOff1) event[beamOff1].daughter1( ev1Dau1V);
-        if (iRecMot1V == beamOff2) event[beamOff2].daughter1( ev2Dau1V);
-      } else {
-        for (int iG = 0; iG < int(iGRecBef.size()); ++iG) {
-          event[iGRecBef[iG]].statusPos();
-          event[iGRecBef[iG]].daughters( 0, 0);
-        }
-      }
-      return false;
-    }
+    // Increment counter to handle counting of rejected emissions
+    if (vetoedEnhancedEmission && canEnhanceEmission) infoPtr->addCounter(40);    
   }
+  // Emission veto is a phase space restriction, and should not be included in the
+  //   uncertainty calculation
+  acceptEvent *= !vetoedEnhancedEmission;
+  if (doUncertaintiesNow)
+    calcUncertainties( acceptEvent, pAccept, weight, vp, dipSel, &rad, &emt);
 
+  // Return false if we decided to reject this branching.  
+  // Veto if necessary.
+  if ( (vetoedEnhancedEmission && canEnhanceEmission) || !acceptEvent) {
+    event.popBack( event.size() - eventSizeOld);
+    event[iRadBef].status( iRadStatusV);
+    event[iRadBef].daughters( iRadDau1V, iRadDau2V);
+    if (useLocalRecoilNow && isrTypeNow == 0) {
+      event[iRecBef].status( iRecStatusV);
+      event[iRecBef].daughters( iRecDau1V, iRecDau2V);
+    } else if (useLocalRecoilNow) {
+      event[iRecBef].mothers( iRecMot1V, iRecMot2V);
+      if (iRecMot1V == beamOff1) event[beamOff1].daughter1( ev1Dau1V);
+      if (iRecMot1V == beamOff2) event[beamOff2].daughter1( ev2Dau1V);
+    } else {
+      for (int iG = 0; iG < int(iGRecBef.size()); ++iG) {
+	event[iGRecBef[iG]].statusPos();
+	event[iGRecBef[iG]].daughters( 0, 0);
+      }
+    }
+    return false;
+  }
+  
   // For global recoil restore the one nominal recoiler, for bookkeeping.
   if (!useLocalRecoilNow) {
     iRec = iRecBef;
@@ -3881,8 +3861,8 @@ bool TimeShower::initUncertainties() {
 
 // Calculate uncertainties for the current event.
 
-void TimeShower::calcUncertainties(bool accept, double pAccept,
-  TimeDipoleEnd* dip, Particle* radPtr, Particle* emtPtr) {
+void TimeShower::calcUncertainties(bool accept, double pAccept, double enhance,
+  double vp, TimeDipoleEnd* dip, Particle* radPtr, Particle* emtPtr) {
 
   // Sanity check.
   if (!doUncertainties || !doUncertaintiesNow || nUncertaintyVariations <= 0)
@@ -3899,7 +3879,10 @@ void TimeShower::calcUncertainties(bool accept, double pAccept,
   // Make vector sizes + 1 since 0 = default and variations start at 1.
   vector<double> uVarFac(nUncertaintyVariations + 1, 1.0);
   vector<bool> doVar(nUncertaintyVariations + 1, false);
-
+  // For the case of biasing, the nominal weight might not be unity
+  doVar[0] = true;
+  uVarFac[0] = 1.0;
+  
   // Extract relevant quantities.
   int idEmt = emtPtr->id();
   int idRad = radPtr->id();
@@ -3983,7 +3966,7 @@ void TimeShower::calcUncertainties(bool accept, double pAccept,
   }
 
   // Ensure 0 < PacceptPrime < 1 (with small margins).
-  for (int iWeight = 1; iWeight<=nUncertaintyVariations; ++iWeight) {
+  for (int iWeight = 0; iWeight<=nUncertaintyVariations; ++iWeight) {
     if (!doVar[iWeight]) continue;
     double pAcceptPrime = pAccept * uVarFac[iWeight];
     if (pAcceptPrime > PROBLIMIT) uVarFac[iWeight] *= PROBLIMIT / pAcceptPrime;
@@ -3993,12 +3976,12 @@ void TimeShower::calcUncertainties(bool accept, double pAccept,
   for (int iWeight = 1; iWeight <= nUncertaintyVariations; ++iWeight) {
     if (!doVar[iWeight]) continue;
     // If trial accepted: apply ratio of accept probabilities.
-    if (accept) infoPtr->reWeight(iWeight, uVarFac[iWeight]);
+    if (accept) infoPtr->reWeight(iWeight, uVarFac[iWeight]/((1.0-vp)*enhance));
     // If trial rejected : apply Sudakov reweightings.
     else {
       // Check for near-singular denominators (indicates too few failures,
       // and hence would need to increase headroom).
-      double denom = 1. - pAccept;
+      double denom = 1. - pAccept*(1.0 - vp);
       if (denom < REJECTFACTOR) {
         stringstream message;
         message << iWeight;
@@ -4006,7 +3989,7 @@ void TimeShower::calcUncertainties(bool accept, double pAccept,
           message.str());
       }
       // Force reweighting factor > 0.
-      double reWtFail = max(0.01, (1. - uVarFac[iWeight] * pAccept) / denom);
+      double reWtFail = max(0.01, (1. - uVarFac[iWeight] * pAccept / enhance) / denom);
       infoPtr->reWeight(iWeight, reWtFail);
     }
   }

@@ -85,9 +85,9 @@ occurring below this threshold.
 <p/>
 Many modern PDFs are specified in terms of sets, each member of which is a 
 viable candidate as PDF.    The following option allows for the calculation
-of a PDF uncertainty using the master formula for each ISR splitting: 
-<flag name="UncertaintyBands:PDFvarISR" default="off"> 
-Flag specifying whether or not to include PDF variations in ISR.
+of a PDF uncertainty using the master formula for each parton shower splitting: 
+<flag name="UncertaintyBands:PDFvarPS" default="off"> 
+Flag specifying whether or not to include PDF variations in the parton shower.
 
 <p/>
 The user can control whether the variations are calculated in all or
