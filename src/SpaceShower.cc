@@ -274,7 +274,7 @@ void SpaceShower::init( BeamParticle* beamAPtrIn,
   cNSpTmin           = settingsPtr->parm("UncertaintyBands:cNSpTmin");
   uVarpTmin2         = pT2min;
   uVarpTmin2        *= settingsPtr->parm("UncertaintyBands:FSRpTmin2Fac");  
-  doPDFvarPS         = settingsPtr->parm("UncertaintyBands:PDFvarPS");  
+  doPDFvarPS         = settingsPtr->flag("UncertaintyBands:PDFvarPS");  
   
   // Possibility to set parton vertex information.
   doPartonVertex     = settingsPtr->flag("PartonVertex:setVertex")
@@ -2301,7 +2301,7 @@ bool SpaceShower::branch( Event& event) {
 
   // Save further properties to be restored.
   if (canVetoEmission || canMergeFirst || canEnhanceET || doWeakShower
-    || doUncertaintiesNow) {
+    || doUncertainties) {
     for ( int iCopy = 0; iCopy < systemSizeOld; ++iCopy) {
       int iOldCopy    = partonSystemsPtr->getAll(iSysSel, iCopy);
       statusV.push_back( event[iOldCopy].status());
@@ -2723,12 +2723,12 @@ bool SpaceShower::branch( Event& event) {
   acceptEvent *= !vetoedEnhancedEmission;
   
   // If doing uncertainty variations, calculate accept/reject reweightings.
-  if (doUncertaintiesNow) calcUncertainties( acceptEvent, pAccept, weight, vp,
-    pT20, dipEndSel, &mother, &sister);
+  if (doUncertaintiesNow) calcUncertainties( acceptEvent, pAccept, pT20, weight,
+    vp, dipEndSel, &mother, &sister);
 
   // Veto if necessary.  
   // Return false if we decided to reject this branching.
-  if( !acceptEvent || (vetoedEnhancedEmission && canEnhanceEmission) ) {
+  if( (doUncertainties && !acceptEvent) || (vetoedEnhancedEmission && canEnhanceEmission) ) {
     // Restore kinematics before returning
     event.popBack( event.size() - eventSizeOld);
     event[beamOff1].daughter1( ev1Dau1V);
